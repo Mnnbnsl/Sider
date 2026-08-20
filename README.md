@@ -13,3 +13,5 @@ SIDER is my understanding and implementation of REDIS.
     - Null Bulk Strings / Arrays
     - RESP Tests — test suite covering the implemented RESP types and invalid/incomplete inputs.
     Tests are written by AI.
+- RESP2 Encoder - Implemented encoder for the above data types.
+
