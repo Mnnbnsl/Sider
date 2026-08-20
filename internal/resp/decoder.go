@@ -3,6 +3,7 @@ package resp
 import (
 	"errors"
 	"strconv"
+	"fmt"
 ) 
 
 // Implementing RESP2 for now.
@@ -228,6 +229,21 @@ func decodeOne(data []byte) (interface{}, int, error) {
 	}
 }
 
+func DecodeArrayString(data []byte) ([]string, error) {
+	value, err := Decode(data)
+	if err != nil {
+		return nil, err
+	}
+
+	ts := value.([]interface{})
+	tokens := make([]string, len(ts))
+	for i := range tokens {
+		tokens[i] = ts[i].(string)
+	}
+
+	return tokens, nil
+}
+
 func Decode(data []byte) (interface{}, error) {
 	if len(data) == 0 {
 		return nil, ErrNoData
@@ -235,4 +251,36 @@ func Decode(data []byte) (interface{}, error) {
 
 	value, _, err := decodeOne(data)
 	return value, err
+}
+
+func Encode(value interface{}, isSimple bool) []byte {
+	switch v := value.(type) {
+
+	case string:
+		if isSimple {
+			return []byte(fmt.Sprintf("+%s\r\n", v))
+		}
+
+		return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(v), v))
+
+	case int:
+		return []byte(fmt.Sprintf(":%d\r\n", v))
+
+	case []interface{}:
+		var result []byte
+
+		result = append(result, fmt.Sprintf("*%d\r\n", len(v))...)
+
+		for _, item := range v {
+			result = append(result, Encode(item, false)...)
+		}
+
+		return result
+
+	case nil:
+		// Null bulk string
+		return []byte("$-1\r\n")
+	}
+
+	return []byte{}
 }
