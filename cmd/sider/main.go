@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"github.com/mnnbnsl/sider/config"
-	"github.com/mnnbnsl/sider/server"
+	"github.com/mnnbnsl/sider/internal/server"
 )
 
 func setupFlags() {
