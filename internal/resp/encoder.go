@@ -2,6 +2,8 @@ package resp
 
 import "fmt"
 
+var RESP_NIL []byte = []byte("-1\r\n")
+
 func Encode(value interface{}, isSimple bool) []byte {
 	switch v := value.(type) {
 
@@ -12,7 +14,7 @@ func Encode(value interface{}, isSimple bool) []byte {
 
 		return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(v), v))
 
-	case int:
+	case int, int16, int32, int64:
 		return []byte(fmt.Sprintf(":%d\r\n", v))
 
 	case []interface{}:
@@ -28,7 +30,7 @@ func Encode(value interface{}, isSimple bool) []byte {
 
 	case nil:
 		// Null bulk string
-		return []byte("$-1\r\n")
+		return RESP_NIL
 	}
 
 	return []byte{}
