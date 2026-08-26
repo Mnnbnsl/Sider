@@ -17,5 +17,5 @@ func setupFlags() {
 func main() {	
 	setupFlags()
 	log.Println("Gearing up SIDER...")
-	server.RunTCPSyncServer()
+	server.RunTCPAsyncServer()
 }
