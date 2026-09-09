@@ -14,9 +14,15 @@ SIDER is my understanding and implementation of REDIS.
     - RESP Tests — test suite covering the implemented RESP types and invalid/incomplete inputs.
     Tests are written by AI.
 - RESP2 Encoder - Implemented encoder for the above data types.
+- Commands : 
+    - PING
+    - SET
+    - GET
+    - TTL
+    - DEL
+    - EXPIRE
 
 - TODO : 
-    - DEL cmd
     - Persistence 
     - Key eviction strategy
 
