@@ -39,8 +39,7 @@ func Get(key string) *Obj {
 	}
 
 	// object expired (TTL passed)
-	if obj.ExpiresAt != -1 &&
-		obj.ExpiresAt <= time.Now().UnixMilli() {
+	if obj.ExpiresAt != -1 && obj.ExpiresAt <= time.Now().UnixMilli() {
 		delete(store, key)
 		return nil
 	}
@@ -61,7 +60,7 @@ func Del(args []string) int {
 	return deleted
 }
 
-func EXPIRE(key string, durationMs int64) int {
+func Expire(key string, durationMs int64) int {
 	obj, exists := store[key]
 	if !exists {
 		return 0

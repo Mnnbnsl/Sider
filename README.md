@@ -2,7 +2,8 @@
 
 SIDER is my understanding and implementation of REDIS.
 ### Current Progress
-- Synchronous TCP Server — basic TCP server implemented and working.
+- Synchronous TCP Server - basic TCP server implemented and working.
+- Asynchronous TCP server - Using EPOLL 
 
 - RESP2 Decoder — implemented support for:
     - Simple Strings
@@ -21,6 +22,10 @@ SIDER is my understanding and implementation of REDIS.
     - TTL
     - DEL
     - EXPIRE
+
+- Cleanup strategies.
+    - Passive cleanup on key access.
+    - Active cleanup every now and then. with sampling size = 25%
 
 - TODO : 
     - Persistence 

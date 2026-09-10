@@ -129,7 +129,7 @@ func EvalEXPIRE(args []string, c io.ReadWriter) error {
 	
 	durationMs := durationSec * 1000
 
-	result := EXPIRE(key, durationMs)
+	result := Expire(key, durationMs)
 	c.Write(resp.Encode(result, false))
 
 	return nil

@@ -86,6 +86,8 @@ func RunTCPSyncServer() {
 	}
 }
 
+
+
 func RunTCPAsyncServer() error {
 	log.Println("starting an asynchronous TCP server on", config.Host, config.Port)
 	con_clients := 0
@@ -139,8 +141,12 @@ func RunTCPAsyncServer() error {
 
 	for {
 		// see if any FD is ready for an IO
-		nevents, e := syscall.EpollWait(epollFD, events[:], -1)
-		if e != nil {
+		nevents, err := syscall.EpollWait(epollFD, events[:], 100)
+		if err != nil {
+			continue
+		}
+		if nevents == 0 {
+			core.Cleanup()
 			continue
 		}
 
