@@ -23,31 +23,57 @@ func readCommand(c io.ReadWriter) (*core.RedisCmd, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	tokens, err := resp.DecodeArrayString(buf[:n])
 	if err != nil {
-		return nil, err 
+		return nil, err
 	}
 
 	return &core.RedisCmd{
-		Cmd : strings.ToUpper(tokens[0]),
-		Args : tokens[1:],
+		Cmd:  strings.ToUpper(tokens[0]),
+		Args: tokens[1:],
 	}, nil
+}
+
+func readCommands(c io.ReadWriter) (core.RedisCmds, error) {
+	// reads 512 byte at a time right now
+	// TODO : extend it so that larger data is read repeatedly
+	var buf []byte = make([]byte, 512)
+	n, err := c.Read(buf[:])
+	if err != nil {
+		return nil, err
+	}
+
+	values, err := resp.Decode(buf[:n])
+	if err != nil {
+		return nil, err
+	}
+
+	var cmds []*core.RedisCmd = make([]*core.RedisCmd, 0)
+	for _, value := range values {
+		tokens, err := resp.ToArrayString(value.([]interface{}))
+		if err != nil {
+			return nil, err
+		}
+		cmds = append(cmds, &core.RedisCmd{
+			Cmd:  strings.ToUpper(tokens[0]),
+			Args: tokens[1:],
+		})
+	}
+	return cmds, nil
 }
 
 func respondError(err error, c io.ReadWriter) {
 	c.Write([]byte(fmt.Sprintf("-%s\r\n", err)))
 }
 
-func respond(cmd *core.RedisCmd, c io.ReadWriter) {
-	if err := core.EvalAndRespond(cmd, c); err != nil {
-		respondError(err, c)
-	} 
+func respond(cmds core.RedisCmds, c io.ReadWriter) {
+	core.EvalAndRespond(cmds, c)
 }
 
 func RunTCPSyncServer() {
 	log.Println("Starting a Synchronous TCP server on", config.Host, config.Port)
-	
+
 	var con_clients = 0
 
 	lsnr, err := net.Listen("tcp", config.Host+":"+strconv.Itoa(config.Port))
@@ -69,24 +95,22 @@ func RunTCPSyncServer() {
 		// another infinite loop
 		for {
 			// over the socket, read the command and print it as it is for now
-			cmd, err := readCommand(c)
+			cmds, err := readCommands(c)
 			if err != nil {
 				if err == io.EOF {
 					c.Close()
 					con_clients -= 1
-					log.Println("Client disconnected :", c.RemoteAddr(), "Concurrent clients :", con_clients,)
+					log.Println("Client disconnected :", c.RemoteAddr(), "Concurrent clients :", con_clients)
 					break
 				}
 				log.Println("err", err)
 				respondError(err, c)
 				continue
 			}
-			respond(cmd, c)
+			respond(cmds, c)
 		}
 	}
 }
-
-
 
 func RunTCPAsyncServer() error {
 	log.Println("starting an asynchronous TCP server on", config.Host, config.Port)
@@ -174,13 +198,13 @@ func RunTCPAsyncServer() error {
 				}
 			} else {
 				comm := core.FDComm{Fd: int(events[i].Fd)}
-				cmd, err := readCommand(comm)
+				cmds, err := readCommands(comm)
 				if err != nil {
 					syscall.Close(int(events[i].Fd))
 					con_clients -= 1
 					continue
 				}
-				respond(cmd, comm)
+				respond(cmds, comm)
 			}
 		}
 	}

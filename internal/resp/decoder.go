@@ -3,7 +3,7 @@ package resp
 import (
 	"errors"
 	"strconv"
-) 
+)
 
 // Implementing RESP2 for now.
 // + simple string
@@ -15,8 +15,8 @@ import (
 
 var (
 	ErrIncomplete = errors.New("Incomplete data")
-	ErrInvalid = errors.New("Invalid data")
-	ErrNoData = errors.New("No data")
+	ErrInvalid    = errors.New("Invalid data")
+	ErrNoData     = errors.New("No data")
 )
 
 func readSimpleString(data []byte) (string, int, error) {
@@ -26,12 +26,12 @@ func readSimpleString(data []byte) (string, int, error) {
 			if i+1 >= len(data) {
 				return "", 0, ErrIncomplete
 			}
-			
+
 			// if no \r\n then invalid data
 			if data[i+1] != '\n' {
 				return "", 0, ErrInvalid
 			}
-			return string(data[1:i]), i+2, nil
+			return string(data[1:i]), i + 2, nil
 		}
 	}
 	return "", 0, ErrIncomplete
@@ -39,7 +39,7 @@ func readSimpleString(data []byte) (string, int, error) {
 
 func readInteger(data []byte) (int, int, error) {
 	if len(data) < 2 {
-    	return 0, 0, ErrIncomplete
+		return 0, 0, ErrIncomplete
 	}
 
 	for i := 1; i < len(data); i++ {
@@ -48,20 +48,20 @@ func readInteger(data []byte) (int, int, error) {
 		}
 		if i == 1 && data[i] == '-' {
 			continue // negative int
-		} 
+		}
 		if data[i] != '\r' {
 			return 0, 0, ErrInvalid // data like 123abc
 		} else {
 			if i+1 >= len(data) {
 				return 0, 0, ErrIncomplete
-			} else if  data[i+1] != '\n' {
+			} else if data[i+1] != '\n' {
 				return 0, 0, ErrInvalid
 			}
 			num, err := strconv.Atoi(string(data[1:i]))
 			if err != nil {
 				return 0, 0, ErrInvalid
 			}
-			return num, i+2, nil
+			return num, i + 2, nil
 		}
 	}
 	return 0, 0, ErrIncomplete
@@ -82,16 +82,16 @@ func readBulkString(data []byte) (string, int, error) {
 	for ; i < len(data); i++ {
 		if data[i] >= '0' && data[i] <= '9' {
 			continue
-		} 
+		}
 		if data[i] == '-' && i == 1 {
 			continue
-		} 
+		}
 		if data[i] != '\r' {
 			return "", 0, ErrInvalid
-		} 
+		}
 		if i+1 >= len(data) {
 			return "", 0, ErrIncomplete
-		} 
+		}
 		if data[i+1] != '\n' {
 			return "", 0, ErrInvalid
 		}
@@ -223,7 +223,7 @@ func decodeOne(data []byte) (interface{}, int, error) {
 		return readArray(data)
 	case '-':
 		return readError(data)
-	default :
+	default:
 		return nil, 0, ErrInvalid
 	}
 }
@@ -234,21 +234,43 @@ func DecodeArrayString(data []byte) ([]string, error) {
 		return nil, err
 	}
 
-	ts := value.([]interface{})
-	tokens := make([]string, len(ts))
+	tokens := make([]string, len(value))
 	for i := range tokens {
-		tokens[i] = ts[i].(string)
+		tokens[i] = value[i].(string)
 	}
 
 	return tokens, nil
 }
 
-func Decode(data []byte) (interface{}, error) {
+func ToArrayString(data []interface{}) ([]string, error) {
+    tokens := make([]string, len(data))
+
+    for i, value := range data {
+        token, ok := value.(string)
+        if !ok {
+            return nil, errors.New("expected string in RESP array")
+        }
+
+        tokens[i] = token
+    }
+
+    return tokens, nil
+}
+
+func Decode(data []byte) ([]interface{}, error) {
 	if len(data) == 0 {
 		return nil, ErrNoData
 	}
 
-	value, _, err := decodeOne(data)
-	return value, err
+	var values []interface{} = make([]interface{}, 0)
+	var index int = 0
+	for index < len(data) {
+		value, delta, err := decodeOne(data[index:])
+		if err != nil {
+			return values, err
+		}
+		index = index + delta
+		values = append(values, value)
+	}
+	return values, nil
 }
-

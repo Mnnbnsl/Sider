@@ -5,3 +5,5 @@ type RedisCmd struct {
 	Args []string 
 }
 
+type RedisCmds []*RedisCmd
+
