@@ -110,7 +110,8 @@ internal/
 │   ├── eval.go      # command dispatch & all command handlers (Eval*)
 │   ├── expiration.go# active sampled expiry cleanup
 │   ├── eviction.go  # (stub) future LRU / LFU / random eviction
-│   └── comm.go      # FDComm — socket Read/Write over a raw file descriptor
+│   |── comm.go      # FDComm — socket Read/Write over a raw file descriptor
+|   └── aof.go       # AOF file writing logic   
 └── resp/
     ├── decoder.go   # RESP2 decoder: strings, errors, ints, bulk, arrays, null
     └── encoder.go   # RESP2 encoder for the same types
@@ -139,7 +140,7 @@ internal/
 
 ## Roadmap
 
-- [ ] Persistence (RDB snapshots / AOF append-only file)
+- [ ] Persistence (RDB snapshots)
 - [ ] Eviction policies — LRU, LFU, and random, for `allkeys-*` and `volatile-*`
 - [ ] Streaming reads (clients currently read in fixed 512-byte chunks)
 - [ ] RESP3 protocol features
