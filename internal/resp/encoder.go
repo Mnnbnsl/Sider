@@ -1,8 +1,24 @@
 package resp
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+	"strconv"
+)
 
 var RESP_NIL []byte = []byte("-1\r\n")
+
+func encodeString(v string) []byte {
+	var b bytes.Buffer
+
+	b.WriteString("$")
+	b.WriteString(strconv.Itoa(len(v)))
+	b.WriteString("\r\n")
+	b.WriteString(v)
+	b.WriteString("\r\n")
+
+	return b.Bytes()
+}
 
 func Encode(value interface{}, isSimple bool) []byte {
 	switch v := value.(type) {
@@ -12,10 +28,23 @@ func Encode(value interface{}, isSimple bool) []byte {
 			return []byte(fmt.Sprintf("+%s\r\n", v))
 		}
 
-		return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(v), v))
+		return encodeString(v)
 
 	case int, int16, int32, int64:
 		return []byte(fmt.Sprintf(":%d\r\n", v))
+
+	case []string:
+		var buf bytes.Buffer
+
+		buf.WriteString("*")
+		buf.WriteString(strconv.Itoa(len(v)))
+		buf.WriteString("\r\n")
+
+		for _, item := range v {
+			buf.Write(encodeString(item))
+		}
+
+		return buf.Bytes()
 
 	case []interface{}:
 		var result []byte
