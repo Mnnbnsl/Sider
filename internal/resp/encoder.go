@@ -6,8 +6,6 @@ import (
 	"strconv"
 )
 
-var RESP_NIL []byte = []byte("-1\r\n")
-
 func encodeString(v string) []byte {
 	var b bytes.Buffer
 

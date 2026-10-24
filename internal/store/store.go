@@ -1,4 +1,4 @@
-package core 
+package store
 
 import (
 	"time"
@@ -7,7 +7,7 @@ import (
 var store map[string]*Obj
 
 type Obj struct {
-	Value interface{}
+	Value     interface{}
 	ExpiresAt int64
 }
 
@@ -21,9 +21,9 @@ func NewObj(value interface{}, durationMs int64) *Obj {
 		expiresAt = time.Now().UnixMilli() + durationMs
 	}
 
-	return &Obj {
-		Value : value,
-		ExpiresAt : expiresAt,
+	return &Obj{
+		Value:     value,
+		ExpiresAt: expiresAt,
 	}
 }
 
@@ -35,7 +35,7 @@ func Get(key string) *Obj {
 	obj, exists := store[key]
 
 	if !exists {
-		return nil 
+		return nil
 	}
 
 	// object expired (TTL passed)
@@ -45,7 +45,7 @@ func Get(key string) *Obj {
 	}
 
 	return obj
-}	
+}
 
 func Del(args []string) int {
 	deleted := 0
@@ -64,9 +64,16 @@ func Expire(key string, durationMs int64) int {
 	obj, exists := store[key]
 	if !exists {
 		return 0
-	}  
+	}
 	if durationMs >= 0 {
 		obj.ExpiresAt = time.Now().UnixMilli() + durationMs
 	}
 	return 1
+}
+
+// Range calls fn for every key currently in the store.
+func Range(fn func(key string, obj *Obj)) {
+	for key, obj := range store {
+		fn(key, obj)
+	}
 }

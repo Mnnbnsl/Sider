@@ -14,8 +14,10 @@ func setupFlags() {
 	flag.Parse()
 }
 
-func main() {	
+func main() {
 	setupFlags()
 	log.Println("Gearing up SIDER...")
-	server.RunTCPAsyncServer()
+	if err := server.RunTCPAsyncServer(); err != nil {
+		log.Fatal(err)
+	}
 }

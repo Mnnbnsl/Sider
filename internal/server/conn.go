@@ -1,9 +1,11 @@
-package core 
+//go:build linux
+
+package server
 
 import "syscall"
 
 type FDComm struct {
-	Fd int 
+	Fd int
 }
 
 func (f FDComm) Write(b []byte) (int, error) {

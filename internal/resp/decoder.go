@@ -243,18 +243,18 @@ func DecodeArrayString(data []byte) ([]string, error) {
 }
 
 func ToArrayString(data []interface{}) ([]string, error) {
-    tokens := make([]string, len(data))
+	tokens := make([]string, len(data))
 
-    for i, value := range data {
-        token, ok := value.(string)
-        if !ok {
-            return nil, errors.New("expected string in RESP array")
-        }
+	for i, value := range data {
+		token, ok := value.(string)
+		if !ok {
+			return nil, errors.New("expected string in RESP array")
+		}
 
-        tokens[i] = token
-    }
+		tokens[i] = token
+	}
 
-    return tokens, nil
+	return tokens, nil
 }
 
 func Decode(data []byte) ([]interface{}, error) {

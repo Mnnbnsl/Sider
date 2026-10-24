@@ -98,23 +98,30 @@ cmd/sider/
 └── main.go          # entry point: flags → server bootstrap
 
 config/
-└── main.go          # default host (0.0.0.0) and port (7030)
+└── config.go        # default host (0.0.0.0), port (7030) and AOF path
 
 internal/
 ├── server/
-│   └── server.go    # async epoll event loop + sync TCP server,
-│                    #   multi-command (pipelined) parsing
-├── core/
-│   ├── store.go     # in-memory key/value store: Value + ExpiresAt per key
-│   ├── cmd.go       # RedisCmd / RedisCmds — parsed command representation
-│   ├── eval.go      # command dispatch & all command handlers (Eval*)
-│   ├── expiration.go# active sampled expiry cleanup
-│   ├── eviction.go  # (stub) future LRU / LFU / random eviction
-│   |── comm.go      # FDComm — socket Read/Write over a raw file descriptor
-|   └── aof.go       # AOF file writing logic   
+│   ├── server.go        # shared read/respond helpers + sync TCP server
+│   ├── epoll_linux.go   # async epoll event loop (Linux only)
+│   ├── epoll_other.go   # non-Linux stub for the async server
+│   └── conn.go          # FDComm — socket Read/Write over a raw fd (Linux)
+├── command/
+│   ├── command.go       # RedisCmd / RedisCmds — parsed command representation
+│   ├── dispatcher.go    # command dispatch (EvalAndRespond)
+│   ├── string.go        # PING, SET, GET handlers
+│   ├── keyspace.go      # TTL, DEL, EXPIRE handlers
+│   └── admin.go         # COMMAND, BGREWRITEAOF handlers
+├── store/
+│   ├── store.go         # in-memory key/value store: Value + ExpiresAt per key
+│   ├── expiration.go    # active sampled expiry cleanup
+│   └── eviction.go      # (stub) future LRU / LFU / random eviction
+├── persistence/
+│   └── aof.go           # AOF file writing logic
 └── resp/
-    ├── decoder.go   # RESP2 decoder: strings, errors, ints, bulk, arrays, null
-    └── encoder.go   # RESP2 encoder for the same types
+    ├── decoder.go       # RESP2 decoder: strings, errors, ints, bulk, arrays, null
+    ├── encoder.go       # RESP2 encoder for the same types
+    └── constants.go     # shared RESP reply constants (OK, PONG, NIL, ...)
 ```
 
 ### How the pieces fit together
@@ -126,9 +133,9 @@ internal/
    client fd is added to the epoll interest set as an `FDComm`.
 4. Incoming bytes are decoded with the **RESP2 decoder** into one or more
    `RedisCmd`s (this is what enables pipelining).
-5. `core.EvalAndRespond` dispatches each command through the matching `Eval*`
+5. `command.EvalAndRespond` dispatches each command through the matching `Eval*`
    handler, encodes the response, and writes it straight back to the socket.
-6. When epoll finds **nothing to do** (idle), the active expiry `Cleanup()` runs.
+6. When epoll finds **nothing to do** (idle), the active expiry `store.Cleanup()` runs.
 
 ### Expiry: passive + active
 
