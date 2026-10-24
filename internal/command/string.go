@@ -2,6 +2,7 @@ package command
 
 import (
 	"errors"
+	"math"
 	"strconv"
 	"strings"
 
@@ -66,4 +67,42 @@ func EvalGET(args []string) []byte {
 	}
 
 	return resp.Encode(obj.Value, false)
+}
+
+func EvalINCR(args []string) []byte {
+	if len(args) != 1 {
+		return resp.Encode(errors.New("ERR wrong number of arguments for 'INCR' command"), false)
+	}
+
+	key := args[0]
+	obj := store.Get(key)
+
+	var intVal int64 = 0
+	if obj != nil {
+		strVal, ok := obj.Value.(string)
+		if !ok {
+			return resp.Encode(errors.New("ERR value is not an integer or out of range"), false)
+		}
+
+		parsed, err := strconv.ParseInt(strVal, 10, 64)
+		if err != nil {
+			return resp.Encode(errors.New("ERR value is not an integer or out of range"), false)
+		}
+		intVal = parsed
+	}
+
+	if intVal == math.MaxInt64 {
+		return resp.Encode(errors.New("ERR increment or decrement would overflow"), false)
+	}
+	intVal++
+
+	value := strconv.FormatInt(intVal, 10)
+	if obj == nil {
+		obj = store.NewObj(value, -1)
+	} else {
+		obj.Value = value
+	}
+	store.Put(key, obj)
+
+	return resp.Encode(intVal, false)
 }

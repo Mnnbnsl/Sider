@@ -31,6 +31,9 @@ func Encode(value interface{}, isSimple bool) []byte {
 	case int, int16, int32, int64:
 		return []byte(fmt.Sprintf(":%d\r\n", v))
 
+	case error:
+		return []byte(fmt.Sprintf("-%s\r\n", v))
+
 	case []string:
 		var buf bytes.Buffer
 

@@ -24,6 +24,8 @@ func EvalAndRespond(cmds RedisCmds, c io.ReadWriter) {
 			buf.Write(EvalSET(cmd.Args))
 		case "GET":
 			buf.Write(EvalGET(cmd.Args))
+		case "INCR":
+			buf.Write(EvalINCR(cmd.Args))
 		case "TTL":
 			buf.Write(EvalTTL(cmd.Args))
 		case "DEL":
