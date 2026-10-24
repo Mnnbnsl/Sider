@@ -87,9 +87,14 @@ and SIDER replies with `+OK\r\n`.
 | `PING` | `PING [message]` | Returns `PONG`, or echoes `message` if given | `PONG` / `hello` |
 | `SET` | `SET key value [EX seconds]` | Stores a value, optionally expiring after `EX` seconds | `OK` |
 | `GET` | `GET key` | Retrieves a value, or null if missing/expired | `"value"` / `(nil)` |
+| `INCR` | `INCR key` | Increments the integer stored at `key` by one; creates it as `1` if missing | `(integer) 2` |
 | `TTL` | `TTL key` | Seconds until expiry; `-1` = forever, `-2` = missing | `(integer) 58` |
 | `DEL` | `DEL key [key ...]` | Removes one or more keys; returns count removed | `(integer) 1` |
 | `EXPIRE` | `EXPIRE key seconds` | Sets (or updates) the TTL of a key | `(integer) 1` |
+
+Reply types follow Redis: `GET` always returns a **bulk string**, while `INCR`
+returns an **integer**. `INCR` only accepts base-10 integer values — applying it
+to a float or non-numeric string returns an error and leaves the value unchanged.
 
 ## Architecture
 
@@ -109,7 +114,7 @@ internal/
 ├── command/
 │   ├── command.go       # RedisCmd / RedisCmds — parsed command representation
 │   ├── dispatcher.go    # command dispatch (EvalAndRespond)
-│   ├── string.go        # PING, SET, GET handlers
+│   ├── string.go        # PING, SET, GET, INCR handlers
 │   ├── keyspace.go      # TTL, DEL, EXPIRE handlers
 │   └── admin.go         # COMMAND, BGREWRITEAOF handlers
 ├── store/
