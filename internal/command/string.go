@@ -2,7 +2,6 @@ package command
 
 import (
 	"errors"
-	"math"
 	"strconv"
 	"strings"
 
@@ -32,6 +31,7 @@ func EvalSET(args []string) []byte {
 	}
 	var exDurationMs int64 = -1
 	key, value := args[0], args[1]
+	oType, oEnc := store.DeduceTypeEncoding(value)
 
 	for i := 2; i < len(args); i++ {
 		switch strings.ToLower(args[i]) {
@@ -50,7 +50,7 @@ func EvalSET(args []string) []byte {
 			return resp.Encode(errors.New("ERR syntax error"), false)
 		}
 	}
-	obj := store.NewObj(value, exDurationMs)
+	obj := store.NewObj(value, exDurationMs, oType, oEnc)
 	store.Put(key, obj)
 	return resp.RESP_OK
 }
@@ -76,33 +76,22 @@ func EvalINCR(args []string) []byte {
 
 	key := args[0]
 	obj := store.Get(key)
-
-	var intVal int64 = 0
-	if obj != nil {
-		strVal, ok := obj.Value.(string)
-		if !ok {
-			return resp.Encode(errors.New("ERR value is not an integer or out of range"), false)
-		}
-
-		parsed, err := strconv.ParseInt(strVal, 10, 64)
-		if err != nil {
-			return resp.Encode(errors.New("ERR value is not an integer or out of range"), false)
-		}
-		intVal = parsed
-	}
-
-	if intVal == math.MaxInt64 {
-		return resp.Encode(errors.New("ERR increment or decrement would overflow"), false)
-	}
-	intVal++
-
-	value := strconv.FormatInt(intVal, 10)
+	
 	if obj == nil {
-		obj = store.NewObj(value, -1)
-	} else {
-		obj.Value = value
+		obj = store.NewObj("0", -1, store.OBJ_TYPE_STRING, store.OBJ_ENCODING_INT)
+		store.Put(key, obj)
 	}
-	store.Put(key, obj)
 
-	return resp.Encode(intVal, false)
+	if err := store.AssertType(obj.TypeEncoding, store.OBJ_TYPE_STRING); err != nil {
+		return resp.Encode(err, false)
+	}
+
+	if err := store.AssertEncoding(obj.TypeEncoding, store.OBJ_ENCODING_INT); err != nil {
+		return resp.Encode(err, false)
+	}
+
+	i, _ := strconv.ParseInt(obj.Value.(string), 10, 64)
+	i++;
+	obj.Value = strconv.FormatInt(i, 10)
+	return resp.Encode(i, false) 
 }
