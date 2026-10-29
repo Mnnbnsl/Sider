@@ -16,8 +16,14 @@ func RDBExists() bool {
 	return fileExists(config.RDBFile)
 }
 
-// TakeSnapshot writes the current in-memory store to the RDB snapshot file.
+// TakeSnapshot writes the current in-memory store to the RDB snapshot file and
+// persists a checkpoint recording how much of the AOF log was already covered
+// by the snapshot, so that startup only has to replay the post-checkpoint tail.
 func TakeSnapshot() error {
+	// The snapshot reflects all writes applied so far, so every AOF entry
+	// appended before this point is already contained in the RDB file.
+	aofSize := AOFSize()
+
 	fp, err := os.OpenFile(config.RDBFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
@@ -39,7 +45,8 @@ func TakeSnapshot() error {
 	}
 
 	lastSnapshot = time.Now()
-	return nil
+
+	return writeCheckpoint(aofSize)
 }
 
 // LoadSnapshot loads the RDB snapshot into the in-memory store when it exists.

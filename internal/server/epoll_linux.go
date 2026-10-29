@@ -5,6 +5,7 @@ package server
 import (
 	"log"
 	"net"
+	"sync"
 	"syscall"
 
 	"github.com/mnnbnsl/sider/config"
@@ -12,62 +13,120 @@ import (
 	"github.com/mnnbnsl/sider/internal/store"
 )
 
-func RunTCPAsyncServer() error {
+type Server struct {
+	listenerFD  int
+	epollFD     int
+	wakeReadFD  int
+	wakeWriteFD int
+
+	mu      sync.Mutex
+	clients map[int]struct{}
+	stop    sync.Once
+}
+
+func New() (*Server, error) {
 	log.Println("starting an asynchronous TCP server on", config.Host, config.Port)
-	con_clients := 0
 
-	max_clients := 20000
-	var events []syscall.EpollEvent = make([]syscall.EpollEvent, max_clients)
-
-	// Create a socket
 	serverFD, err := syscall.Socket(syscall.AF_INET, syscall.O_NONBLOCK|syscall.SOCK_STREAM, 0)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer syscall.Close(serverFD)
+	closeServerFD := func() {
+		syscall.Close(serverFD)
+	}
 
-	// Set the Socket operate in a non-blocking mode
 	if err = syscall.SetNonblock(serverFD, true); err != nil {
-		return err
+		closeServerFD()
+		return nil, err
 	}
 
-	// Bind the IP and the port
 	ip4 := net.ParseIP(config.Host)
+	if ip4 == nil || ip4.To4() == nil {
+		closeServerFD()
+		return nil, syscall.EINVAL
+	}
+	var addr [4]byte
+	copy(addr[:], ip4.To4())
 	if err = syscall.Bind(serverFD, &syscall.SockaddrInet4{
 		Port: config.Port,
-		Addr: [4]byte{ip4[0], ip4[1], ip4[2], ip4[3]},
+		Addr: addr,
 	}); err != nil {
-		return err
+		closeServerFD()
+		return nil, err
+	}
+	if err = syscall.Listen(serverFD, 20000); err != nil {
+		closeServerFD()
+		return nil, err
 	}
 
-	if err = syscall.Listen(serverFD, max_clients); err != nil {
-		return err
-	}
-
-	// creating EPOLL instance
 	epollFD, err := syscall.EpollCreate1(0)
 	if err != nil {
-		log.Fatal(err)
+		closeServerFD()
+		return nil, err
 	}
-	defer syscall.Close(epollFD)
-
-	// Specify the events we want to get hints about
-	// and set the socket on which
-	var socketServerEvent syscall.EpollEvent = syscall.EpollEvent{
-		Events: syscall.EPOLLIN,
-		Fd:     int32(serverFD),
+	closeResources := func() {
+		syscall.Close(epollFD)
+		closeServerFD()
 	}
 
-	// Listen to read events on the Server itself
-	if err = syscall.EpollCtl(epollFD, syscall.EPOLL_CTL_ADD, serverFD, &socketServerEvent); err != nil {
-		return err
+	wakeFDs := make([]int, 2)
+	if err = syscall.Pipe(wakeFDs); err != nil {
+		closeResources()
+		return nil, err
+	}
+	closeAll := func() {
+		syscall.Close(wakeFDs[0])
+		syscall.Close(wakeFDs[1])
+		closeResources()
 	}
 
+	s := &Server{
+		listenerFD:  serverFD,
+		epollFD:     epollFD,
+		wakeReadFD:  wakeFDs[0],
+		wakeWriteFD: wakeFDs[1],
+		clients:     make(map[int]struct{}),
+	}
+
+	addEvent := func(fd int) error {
+		return syscall.EpollCtl(epollFD, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{
+			Events: syscall.EPOLLIN,
+			Fd:     int32(fd),
+		})
+	}
+	if err = addEvent(serverFD); err != nil {
+		closeAll()
+		return nil, err
+	}
+	if err = addEvent(wakeFDs[0]); err != nil {
+		closeAll()
+		return nil, err
+	}
+	return s, nil
+}
+
+func (s *Server) Serve() error {
+	defer func() {
+		syscall.Close(s.listenerFD)
+		syscall.Close(s.epollFD)
+		syscall.Close(s.wakeReadFD)
+		syscall.Close(s.wakeWriteFD)
+		s.mu.Lock()
+		for fd := range s.clients {
+			syscall.Close(fd)
+			delete(s.clients, fd)
+		}
+		s.mu.Unlock()
+	}()
+
+	events := make([]syscall.EpollEvent, 20000)
 	for {
-		// see if any FD is ready for an IO
-		nevents, err := syscall.EpollWait(epollFD, events[:], 100)
+		nevents, err := syscall.EpollWait(s.epollFD, events, 100)
 		if err != nil {
-			continue
+			if err == syscall.EINTR {
+				continue
+			}
+			return err
 		}
 		if nevents == 0 {
 			store.Cleanup()
@@ -77,37 +136,62 @@ func RunTCPAsyncServer() error {
 		}
 
 		for i := 0; i < nevents; i++ {
-			// if the socket server itself is ready for an IO
-			if int(events[i].Fd) == serverFD {
-				// accept the incoming connection from a client
-				fd, _, err := syscall.Accept(serverFD)
-				if err != nil {
-					log.Println("err", err)
-					continue
-				}
-
-				// increase the number of concurrent clients count
-				con_clients++
-				syscall.SetNonblock(fd, true)
-
-				// add this new TCP connection to be monitored
-				var socketClientEvent syscall.EpollEvent = syscall.EpollEvent{
-					Events: syscall.EPOLLIN,
-					Fd:     int32(fd),
-				}
-				if err := syscall.EpollCtl(epollFD, syscall.EPOLL_CTL_ADD, fd, &socketClientEvent); err != nil {
-					log.Fatal(err)
-				}
-			} else {
-				comm := FDComm{Fd: int(events[i].Fd)}
-				cmds, err := readCommands(comm)
-				if err != nil {
-					syscall.Close(int(events[i].Fd))
-					con_clients -= 1
-					continue
-				}
-				respond(cmds, comm)
+			fd := int(events[i].Fd)
+			if fd == s.wakeReadFD {
+				return nil
 			}
+			if fd == s.listenerFD {
+				clientFD, _, err := syscall.Accept(s.listenerFD)
+				if err != nil {
+					if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
+						continue
+					}
+					return err
+				}
+				if err := syscall.SetNonblock(clientFD, true); err != nil {
+					syscall.Close(clientFD)
+					continue
+				}
+				if err := syscall.EpollCtl(s.epollFD, syscall.EPOLL_CTL_ADD, clientFD, &syscall.EpollEvent{
+					Events: syscall.EPOLLIN,
+					Fd:     int32(clientFD),
+				}); err != nil {
+					syscall.Close(clientFD)
+					continue
+				}
+				s.mu.Lock()
+				s.clients[clientFD] = struct{}{}
+				s.mu.Unlock()
+				continue
+			}
+
+			comm := FDComm{Fd: fd}
+			cmds, err := readCommands(comm)
+			if err != nil {
+				s.closeClient(fd)
+				continue
+			}
+			respond(cmds, comm)
 		}
 	}
+}
+
+func (s *Server) closeClient(fd int) {
+	syscall.EpollCtl(s.epollFD, syscall.EPOLL_CTL_DEL, fd, nil)
+	syscall.Close(fd)
+	s.mu.Lock()
+	delete(s.clients, fd)
+	s.mu.Unlock()
+}
+
+func (s *Server) Shutdown() {
+	s.stop.Do(func() {
+		syscall.Close(s.listenerFD)
+		s.mu.Lock()
+		for fd := range s.clients {
+			syscall.Close(fd)
+		}
+		s.mu.Unlock()
+		_, _ = syscall.Write(s.wakeWriteFD, []byte{1})
+	})
 }

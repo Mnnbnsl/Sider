@@ -1,3 +1,7 @@
 // AOF file
 sider.aof
 sider.rdb
+
+// Checkpoint file
+sider.checkpoint
+sider.checkpoint.tmp

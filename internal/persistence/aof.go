@@ -105,12 +105,26 @@ func readEntries(fp *os.File) ([][]string, error) {
 }
 
 // LoadAOF replays the AOF file into the in-memory store when it exists and
-// prepares the append handle for future writes.
+// prepares the append handle for future writes. If a checkpoint exists, the
+// part of the AOF that was already reflected in the RDB snapshot is skipped.
 func LoadAOF() error {
 	if fileExists(config.AOFFile) {
+		skipFrom := int64(0)
+		if cp, ok, err := readCheckpoint(); err != nil {
+			return err
+		} else if ok && RDBExists() && cp.AofSize <= AOFSize() {
+			skipFrom = cp.AofSize
+		}
+
 		fp, err := os.Open(config.AOFFile)
 		if err != nil {
 			return err
+		}
+		if skipFrom > 0 {
+			if _, err := fp.Seek(skipFrom, io.SeekStart); err != nil {
+				fp.Close()
+				return err
+			}
 		}
 		entries, err := readEntries(fp)
 		fp.Close()
@@ -205,6 +219,9 @@ func RewriteAOF() error {
 	}
 
 	lastRewrite = time.Now()
+	if err := clearCheckpoint(); err != nil {
+		return err
+	}
 	return nil
 }
 

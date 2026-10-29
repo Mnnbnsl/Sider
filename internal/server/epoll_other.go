@@ -4,8 +4,14 @@ package server
 
 import "errors"
 
-// RunTCPAsyncServer is only available on Linux, where the event loop is backed
-// by epoll. Other platforms can still use RunTCPSyncServer.
-func RunTCPAsyncServer() error {
+type Server struct{}
+
+func New() (*Server, error) {
+	return nil, errors.New("asynchronous server (epoll) is only supported on linux")
+}
+
+func (s *Server) Serve() error {
 	return errors.New("asynchronous server (epoll) is only supported on linux")
 }
+
+func (s *Server) Shutdown() {}

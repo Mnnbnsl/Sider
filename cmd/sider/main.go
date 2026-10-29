@@ -17,6 +17,7 @@ func setupFlags() {
 	flag.StringVar(&config.Host, "host", "0.0.0.0", "Host for SIDER server")
 	flag.IntVar(&config.Port, "port", 7030, "Port number for SIDER server")
 	flag.StringVar(&config.RDBFile, "rdb-file", config.RDBFile, "Path of the RDB snapshot file")
+	flag.StringVar(&config.CheckpointFile, "checkpoint-file", config.CheckpointFile, "Path of the checkpoint file recording the RDB/AOF boundary")
 	flag.Int64Var(&config.SnapshotIntervalMs, "snapshot-interval", config.SnapshotIntervalMs, "Snapshot interval in milliseconds for RDB snapshots")
 	flag.Int64Var(&config.AOFMaxSizeBytes, "aof-max-size", config.AOFMaxSizeBytes, "Max size of AOF file in bytes before rewrite")
 	flag.Int64Var(&config.AOFRewriteIntervalMs, "aof-rewrite-interval", config.AOFRewriteIntervalMs, "AOF rewrite interval in milliseconds")
@@ -33,18 +34,32 @@ func main() {
 		log.Fatal(err)
 	}
 
+	srv, err := server.New()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	serverErr := make(chan error, 1)
 	go func() {
-		<-ctx.Done()
-		log.Println("Shutdown signal received, taking RDB snapshot...")
-		if err := persistence.TakeSnapshot(); err != nil {
-			log.Println("error taking RDB snapshot on shutdown:", err)
-		}
-		os.Exit(0)
+		serverErr <- srv.Serve()
 	}()
 
-	if err := server.RunTCPAsyncServer(); err != nil {
-		log.Fatal(err)
+	select {
+	case err := <-serverErr:
+		if err != nil {
+			log.Fatal(err)
+		}
+	case <-ctx.Done():
+		log.Println("Shutdown signal received, closing server...")
+		srv.Shutdown()
+		if err := <-serverErr; err != nil {
+			log.Println("error stopping server:", err)
+		}
+		log.Println("Taking final RDB snapshot...")
+		if err := persistence.TakeSnapshot(); err != nil {
+			log.Fatal(err)
+		}
 	}
 }

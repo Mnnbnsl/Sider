@@ -23,6 +23,8 @@ by hand with almost no dependencies outside the standard library.
   sampled cleanup (during idle event-loop cycles).
 - **Persistence** — append-only **AOF** with startup replay, live appends after writes,
   and periodic **RDB snapshots** with interval-based rewrites and size-based compaction.
+  Snapshots record an AOF checkpoint so startup only replays the portion added after
+  the snapshot.
 
 ## Getting Started
 
@@ -40,6 +42,7 @@ go build -o sider ./cmd/sider
 ./sider                          # listens on 0.0.0.0:7030
 ./sider --port 6379             # custom port
 ./sider --host 127.0.0.1        # bind only to loopback
+./sider --checkpoint-file ./sider.checkpoint
 ```
 
 You should see:
@@ -134,7 +137,7 @@ internal/
 
 ### How the pieces fit together
 
-1. `main.go` parses `--host` / `--port` and starts `server.RunTCPAsyncServer()`.
+1. `main.go` parses the server and persistence flags and starts `server.RunTCPAsyncServer()`.
 2. The server creates a non-blocking listening socket, wraps it in an **epoll**
    instance, and waits with `syscall.EpollWait`.
 3. Read-ready sockets are demultiplexed: the listener gets `Accept`ed, and each
