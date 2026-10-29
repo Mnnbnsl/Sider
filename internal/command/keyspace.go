@@ -2,9 +2,11 @@ package command
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
+	"github.com/mnnbnsl/sider/internal/persistence"
 	"github.com/mnnbnsl/sider/internal/resp"
 	"github.com/mnnbnsl/sider/internal/store"
 )
@@ -39,6 +41,11 @@ func EvalDEL(args []string) []byte {
 	}
 
 	deleted := store.Del(args)
+	if len(args) > 0 {
+		if err := persistence.AppendDel(args...); err != nil {
+			return resp.Encode(fmt.Errorf("ERR failed to persist DEL: %w", err), false)
+		}
+	}
 	return resp.Encode(deleted, false)
 }
 
@@ -56,5 +63,13 @@ func EvalEXPIRE(args []string) []byte {
 	durationMs := durationSec * 1000
 
 	result := store.Expire(key, durationMs)
+	if result > 0 {
+		obj := store.Get(key)
+		if obj != nil {
+			if err := persistence.AppendSet(key, obj.Value.(string), obj.ExpiresAt); err != nil {
+				return resp.Encode(fmt.Errorf("ERR failed to persist EXPIRE: %w", err), false)
+			}
+		}
+	}
 	return resp.Encode(result, false)
 }

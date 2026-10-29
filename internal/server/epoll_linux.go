@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/mnnbnsl/sider/config"
+	"github.com/mnnbnsl/sider/internal/persistence"
 	"github.com/mnnbnsl/sider/internal/store"
 )
 
@@ -70,6 +71,8 @@ func RunTCPAsyncServer() error {
 		}
 		if nevents == 0 {
 			store.Cleanup()
+			persistence.MaybeSnapshot()
+			persistence.MaybeRewriteAOF()
 			continue
 		}
 

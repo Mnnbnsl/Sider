@@ -21,6 +21,8 @@ by hand with almost no dependencies outside the standard library.
   answered in one round-trip.
 - **TTL & expiry** — per-key expiry with **passive** cleanup (on access) and **active**
   sampled cleanup (during idle event-loop cycles).
+- **Persistence** — append-only **AOF** with startup replay, live appends after writes,
+  and periodic **RDB snapshots** with interval-based rewrites and size-based compaction.
 
 ## Getting Started
 
@@ -103,7 +105,7 @@ cmd/sider/
 └── main.go          # entry point: flags → server bootstrap
 
 config/
-└── config.go        # default host (0.0.0.0), port (7030) and AOF path
+└── config.go        # default host (0.0.0.0), port (7030), AOF path and RDB snapshot path
 
 internal/
 ├── server/
@@ -116,13 +118,14 @@ internal/
 │   ├── dispatcher.go    # command dispatch (EvalAndRespond)
 │   ├── string.go        # PING, SET, GET, INCR handlers
 │   ├── keyspace.go      # TTL, DEL, EXPIRE handlers
-│   └── admin.go         # COMMAND, BGREWRITEAOF handlers
+│   └── admin.go         # COMMAND, BGREWRITEAOF handlers (AOF rewrite)
 ├── store/
 │   ├── store.go         # in-memory key/value store: Value + ExpiresAt per key
 │   ├── expiration.go    # active sampled expiry cleanup
 │   └── eviction.go      # (stub) future LRU / LFU / random eviction
 ├── persistence/
-│   └── aof.go           # AOF file writing logic
+│   ├── aof.go           # AOF append / rewrite / replay logic
+│   └── rdb.go           # RDB snapshot: take / load / schedule
 └── resp/
     ├── decoder.go       # RESP2 decoder: strings, errors, ints, bulk, arrays, null
     ├── encoder.go       # RESP2 encoder for the same types
@@ -152,7 +155,7 @@ internal/
 
 ## Roadmap
 
-- [ ] Persistence (RDB snapshots)
+- [x] Persistence (RDB snapshots)
 - [ ] Eviction policies — LRU, LFU, and random, for `allkeys-*` and `volatile-*`
 - [ ] Streaming reads (clients currently read in fixed 512-byte chunks)
 - [ ] RESP3 protocol features

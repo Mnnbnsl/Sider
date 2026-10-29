@@ -2,9 +2,11 @@ package command
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/mnnbnsl/sider/internal/persistence"
 	"github.com/mnnbnsl/sider/internal/resp"
 	"github.com/mnnbnsl/sider/internal/store"
 )
@@ -52,6 +54,9 @@ func EvalSET(args []string) []byte {
 	}
 	obj := store.NewObj(value, exDurationMs, oType, oEnc)
 	store.Put(key, obj)
+	if err := persistence.AppendSet(key, value, obj.ExpiresAt); err != nil {
+		return resp.Encode(fmt.Errorf("ERR failed to persist SET: %w", err), false)
+	}
 	return resp.RESP_OK
 }
 
@@ -73,10 +78,9 @@ func EvalINCR(args []string) []byte {
 	if len(args) != 1 {
 		return resp.Encode(errors.New("ERR wrong number of arguments for 'INCR' command"), false)
 	}
-
 	key := args[0]
 	obj := store.Get(key)
-	
+
 	if obj == nil {
 		obj = store.NewObj("0", -1, store.OBJ_TYPE_STRING, store.OBJ_ENCODING_INT)
 		store.Put(key, obj)
@@ -91,7 +95,10 @@ func EvalINCR(args []string) []byte {
 	}
 
 	i, _ := strconv.ParseInt(obj.Value.(string), 10, 64)
-	i++;
+	i++
 	obj.Value = strconv.FormatInt(i, 10)
-	return resp.Encode(i, false) 
+	if err := persistence.AppendSet(key, obj.Value.(string), obj.ExpiresAt); err != nil {
+		return resp.Encode(fmt.Errorf("ERR failed to persist INCR: %w", err), false)
+	}
+	return resp.Encode(i, false)
 }
