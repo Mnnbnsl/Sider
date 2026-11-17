@@ -34,6 +34,8 @@ func EvalAndRespond(cmds RedisCmds, c io.ReadWriter) {
 			buf.Write(EvalEXPIRE(cmd.Args))
 		case "BGREWRITEAOF":
 			buf.Write(EvalBGREWRITEAOF(cmd.Args))
+		case "INFO":
+			buf.Write(EvalINFO(cmd.Args))
 		case "COMMAND":
 			buf.Write(resp.RESP_EMPTY_ARRAY)
 		default:

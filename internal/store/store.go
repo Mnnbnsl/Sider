@@ -7,11 +7,10 @@ import (
 var store map[string]*Obj
 
 type Obj struct {
-	TypeEncoding uint8 		// 8 bits - 4 : type + 4 : encoding
-	Value     interface{}
-	ExpiresAt int64
+	TypeEncoding uint8 // 8 bits - 4 : type + 4 : encoding
+	Value        interface{}
+	ExpiresAt    int64
 }
-
 
 func init() {
 	store = make(map[string]*Obj)
@@ -25,13 +24,36 @@ func NewObj(value interface{}, durationMs int64, oType uint8, oEnc uint8) *Obj {
 
 	return &Obj{
 		TypeEncoding: oType | oEnc,
-		Value:     value,
-		ExpiresAt: expiresAt,
+		Value:        value,
+		ExpiresAt:    expiresAt,
 	}
 }
 
 func Put(key string, obj *Obj) {
 	store[key] = obj
+}
+
+type Stats struct {
+	KeyCount     int
+	ExpiringKeys int
+}
+
+func GetStats() Stats {
+	stats := Stats{}
+	now := time.Now().UnixMilli()
+
+	for key, obj := range store {
+		if obj.ExpiresAt != -1 && obj.ExpiresAt <= now {
+			delete(store, key)
+			continue
+		}
+		stats.KeyCount++
+		if obj.ExpiresAt != -1 {
+			stats.ExpiringKeys++
+		}
+	}
+
+	return stats
 }
 
 func Get(key string) *Obj {

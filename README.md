@@ -96,6 +96,7 @@ and SIDER replies with `+OK\r\n`.
 | `TTL` | `TTL key` | Seconds until expiry; `-1` = forever, `-2` = missing | `(integer) 58` |
 | `DEL` | `DEL key [key ...]` | Removes one or more keys; returns count removed | `(integer) 1` |
 | `EXPIRE` | `EXPIRE key seconds` | Sets (or updates) the TTL of a key | `(integer) 1` |
+| `INFO` | `INFO [section]` | Returns store and eviction statistics | bulk string |
 
 Reply types follow Redis: `GET` always returns a **bulk string**, while `INCR`
 returns an **integer**. `INCR` only accepts base-10 integer values — applying it
@@ -125,7 +126,7 @@ internal/
 ├── store/
 │   ├── store.go         # in-memory key/value store: Value + ExpiresAt per key
 │   ├── expiration.go    # active sampled expiry cleanup
-│   └── eviction.go      # (stub) future LRU / LFU / random eviction
+│   └── eviction.go      # configurable key eviction strategies
 ├── persistence/
 │   ├── aof.go           # AOF append / rewrite / replay logic
 │   └── rdb.go           # RDB snapshot: take / load / schedule
@@ -158,8 +159,7 @@ internal/
 
 ## Roadmap
 
-- [x] Persistence (RDB snapshots)
-- [ ] Eviction policies — LRU, LFU, and random, for `allkeys-*` and `volatile-*`
+- [x] `allkeys-random` eviction policy
 - [ ] Streaming reads (clients currently read in fixed 512-byte chunks)
 - [ ] RESP3 protocol features
 - [ ] More data types (lists, hashes, sets, sorted sets)

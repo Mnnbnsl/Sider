@@ -57,6 +57,11 @@ func EvalSET(args []string) []byte {
 	if err := persistence.AppendSet(key, value, obj.ExpiresAt); err != nil {
 		return resp.Encode(fmt.Errorf("ERR failed to persist SET: %w", err), false)
 	}
+	if evicted := store.Evict(); len(evicted) > 0 {
+		if err := persistence.AppendDel(evicted...); err != nil {
+			return resp.Encode(fmt.Errorf("ERR failed to persist eviction: %w", err), false)
+		}
+	}
 	return resp.RESP_OK
 }
 
@@ -99,6 +104,11 @@ func EvalINCR(args []string) []byte {
 	obj.Value = strconv.FormatInt(i, 10)
 	if err := persistence.AppendSet(key, obj.Value.(string), obj.ExpiresAt); err != nil {
 		return resp.Encode(fmt.Errorf("ERR failed to persist INCR: %w", err), false)
+	}
+	if evicted := store.Evict(); len(evicted) > 0 {
+		if err := persistence.AppendDel(evicted...); err != nil {
+			return resp.Encode(fmt.Errorf("ERR failed to persist eviction: %w", err), false)
+		}
 	}
 	return resp.Encode(i, false)
 }
