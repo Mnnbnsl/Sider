@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"log"
 	"os"
@@ -39,11 +38,28 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(signals)
+
 	serverErr := make(chan error, 1)
+	serverDone := make(chan struct{})
 	go func() {
-		serverErr <- srv.Serve()
+		err := srv.Serve()
+		serverErr <- err
+		close(serverDone)
+	}()
+
+	shutdownComplete := make(chan struct{})
+	go func() {
+		select {
+		case sig := <-signals:
+			log.Printf("Shutdown signal received (%s), closing server...", sig)
+			srv.Shutdown()
+			close(shutdownComplete)
+		case <-serverDone:
+			// The server stopped before a shutdown signal was received.
+		}
 	}()
 
 	select {
@@ -51,9 +67,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-	case <-ctx.Done():
-		log.Println("Shutdown signal received, closing server...")
-		srv.Shutdown()
+	case <-shutdownComplete:
 		if err := <-serverErr; err != nil {
 			log.Println("error stopping server:", err)
 		}
