@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/mnnbnsl/sider/config"
@@ -19,9 +20,10 @@ type Server struct {
 	wakeReadFD  int
 	wakeWriteFD int
 
-	mu      sync.Mutex
-	clients map[int]struct{}
-	stop    sync.Once
+	mu       sync.Mutex
+	clients  map[int]struct{}
+	stop     sync.Once
+	stopping atomic.Bool
 }
 
 func New() (*Server, error) {
@@ -135,12 +137,17 @@ func (s *Server) Serve() error {
 			continue
 		}
 
+		shutdownRequested := false
 		for i := 0; i < nevents; i++ {
 			fd := int(events[i].Fd)
 			if fd == s.wakeReadFD {
-				return nil
+				shutdownRequested = true
+				continue
 			}
 			if fd == s.listenerFD {
+				if s.stopping.Load() {
+					continue
+				}
 				clientFD, _, err := syscall.Accept(s.listenerFD)
 				if err != nil {
 					if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
@@ -173,6 +180,9 @@ func (s *Server) Serve() error {
 			}
 			respond(cmds, comm)
 		}
+		if shutdownRequested {
+			return nil
+		}
 	}
 }
 
@@ -184,14 +194,12 @@ func (s *Server) closeClient(fd int) {
 	s.mu.Unlock()
 }
 
+// Shutdown stops accepting new clients and wakes the event loop. The event
+// loop finishes the current batch of client events before closing resources.
 func (s *Server) Shutdown() {
 	s.stop.Do(func() {
-		syscall.Close(s.listenerFD)
-		s.mu.Lock()
-		for fd := range s.clients {
-			syscall.Close(fd)
-		}
-		s.mu.Unlock()
+		s.stopping.Store(true)
+		_ = syscall.EpollCtl(s.epollFD, syscall.EPOLL_CTL_DEL, s.listenerFD, nil)
 		_, _ = syscall.Write(s.wakeWriteFD, []byte{1})
 	})
 }

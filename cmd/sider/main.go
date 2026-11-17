@@ -23,6 +23,64 @@ func setupFlags() {
 	flag.Parse()
 }
 
+func serveServer(
+	srv *server.Server,
+	serverErr chan<- error,
+	serverDone chan<- struct{},
+) {
+	serverErr <- srv.Serve()
+	close(serverDone)
+}
+
+func startServer(srv *server.Server) (<-chan error, <-chan struct{}) {
+	serverErr := make(chan error, 1)
+	serverDone := make(chan struct{})
+
+	go serveServer(srv, serverErr, serverDone)
+
+	return serverErr, serverDone
+}
+
+func shutdownOnSignal(
+	signals <-chan os.Signal,
+	srv *server.Server,
+	serverDone <-chan struct{},
+	shutdownRequested chan<- struct{},
+) {
+	select {
+	case sig := <-signals:
+		log.Printf("Shutdown signal received (%s), closing server...", sig)
+		srv.Shutdown()
+		close(shutdownRequested)
+	case <-serverDone:
+		// The server stopped before a shutdown signal was received.
+	}
+}
+
+func waitForShutdown(
+	signals <-chan os.Signal,
+	srv *server.Server,
+	serverDone <-chan struct{},
+) <-chan struct{} {
+	shutdownRequested := make(chan struct{})
+
+	go shutdownOnSignal(signals, srv, serverDone, shutdownRequested)
+
+	return shutdownRequested
+}
+
+func waitForServerShutdown(
+	serverErr <-chan error,
+	shutdownRequested <-chan struct{},
+) (error, bool) {
+	select {
+	case err := <-serverErr:
+		return err, false
+	case <-shutdownRequested:
+		return <-serverErr, true
+	}
+}
+
 func main() {
 	setupFlags()
 	log.Println("Gearing up SIDER...")
@@ -42,35 +100,15 @@ func main() {
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(signals)
 
-	serverErr := make(chan error, 1)
-	serverDone := make(chan struct{})
-	go func() {
-		err := srv.Serve()
-		serverErr <- err
-		close(serverDone)
-	}()
+	serverErr, serverDone := startServer(srv)
+	shutdownRequestedChan := waitForShutdown(signals, srv, serverDone)
 
-	shutdownComplete := make(chan struct{})
-	go func() {
-		select {
-		case sig := <-signals:
-			log.Printf("Shutdown signal received (%s), closing server...", sig)
-			srv.Shutdown()
-			close(shutdownComplete)
-		case <-serverDone:
-			// The server stopped before a shutdown signal was received.
-		}
-	}()
+	err, shutdownRequested := waitForServerShutdown(serverErr, shutdownRequestedChan)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	select {
-	case err := <-serverErr:
-		if err != nil {
-			log.Fatal(err)
-		}
-	case <-shutdownComplete:
-		if err := <-serverErr; err != nil {
-			log.Println("error stopping server:", err)
-		}
+	if shutdownRequested {
 		log.Println("Taking final RDB snapshot...")
 		if err := persistence.TakeSnapshot(); err != nil {
 			log.Fatal(err)
