@@ -10,6 +10,7 @@ type Obj struct {
 	TypeEncoding uint8 // 8 bits - 4 : type + 4 : encoding
 	Value        interface{}
 	ExpiresAt    int64
+	LRU          uint32
 }
 
 func init() {
@@ -26,6 +27,7 @@ func NewObj(value interface{}, durationMs int64, oType uint8, oEnc uint8) *Obj {
 		TypeEncoding: oType | oEnc,
 		Value:        value,
 		ExpiresAt:    expiresAt,
+		LRU:          lruClock(),
 	}
 }
 
@@ -69,6 +71,7 @@ func Get(key string) *Obj {
 		return nil
 	}
 
+	obj.LRU = lruClock()
 	return obj
 }
 

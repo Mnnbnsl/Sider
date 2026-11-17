@@ -160,6 +160,7 @@ internal/
 ## Roadmap
 
 - [x] `allkeys-random` eviction policy
+- [x] Approximate `allkeys-lru` eviction policy
 - [ ] Streaming reads (clients currently read in fixed 512-byte chunks)
 - [ ] RESP3 protocol features
 - [ ] More data types (lists, hashes, sets, sorted sets)

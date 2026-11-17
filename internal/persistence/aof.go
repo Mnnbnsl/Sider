@@ -57,11 +57,9 @@ func applyTokens(tokens []string) {
 			}
 		}
 		oType, oEnc := store.DeduceTypeEncoding(value)
-		store.Put(key, &store.Obj{
-			TypeEncoding: oType | oEnc,
-			Value:        value,
-			ExpiresAt:    exMs,
-		})
+		obj := store.NewObj(value, -1, oType, oEnc)
+		obj.ExpiresAt = exMs
+		store.Put(key, obj)
 	case "DEL":
 		if len(tokens) > 1 {
 			store.Del(tokens[1:])
