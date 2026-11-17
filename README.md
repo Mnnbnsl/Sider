@@ -19,6 +19,8 @@ by hand with almost no dependencies outside the standard library.
   concurrent client connections from a single thread.
 - **Command pipelining** — multiple commands sent in a single write are parsed and
   answered in one round-trip.
+- **Graceful shutdown** — `SIGINT` and `SIGTERM` stop new connections, finish the
+  current event-loop batch, close clients, and write a final RDB snapshot.
 - **TTL & expiry** — per-key expiry with **passive** cleanup (on access) and **active**
   sampled cleanup (during idle event-loop cycles).
 - **Persistence** — append-only **AOF** with startup replay, live appends after writes,
@@ -138,7 +140,8 @@ internal/
 
 ### How the pieces fit together
 
-1. `main.go` parses the server and persistence flags and starts `server.RunTCPAsyncServer()`.
+1. `main.go` parses the server and persistence flags, starts the server goroutine, and
+   starts a signal-waiting goroutine.
 2. The server creates a non-blocking listening socket, wraps it in an **epoll**
    instance, and waits with `syscall.EpollWait`.
 3. Read-ready sockets are demultiplexed: the listener gets `Accept`ed, and each
@@ -148,6 +151,29 @@ internal/
 5. `command.EvalAndRespond` dispatches each command through the matching `Eval*`
    handler, encodes the response, and writes it straight back to the socket.
 6. When epoll finds **nothing to do** (idle), the active expiry `store.Cleanup()` runs.
+7. On shutdown, the signal goroutine asks the server to stop accepting clients. The
+   event loop drains the current ready-event batch before closing client connections
+   and server resources.
+
+### Graceful shutdown
+
+The server listens for `SIGINT` and `SIGTERM`. Shutdown is coordinated through
+channels:
+
+1. The signal handler marks the server as stopping and wakes the epoll loop.
+2. New connections are rejected while already-ready client events finish processing.
+3. The server closes client and epoll resources after the current event batch completes.
+4. The main goroutine waits for server completion and takes a final RDB snapshot.
+
+For example, press `Ctrl+C` in the terminal running SIDER, or send `SIGTERM` to its
+process.
+
+### Eviction
+
+Set `config.EvictionStrategy` to choose an eviction policy. `allkeys-lru` uses
+Redis-style approximate LRU eviction: five random keys are sampled for each removal,
+and the least recently accessed sampled key is evicted. Access times use a 32-bit
+wrapping clock, so elapsed-time calculation remains correct across clock wraparound.
 
 ### Expiry: passive + active
 
